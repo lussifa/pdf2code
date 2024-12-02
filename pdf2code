@@ -1,0 +1,160 @@
+import logging
+import re
+import pdfplumber
+import tkinter as tk
+from tkinter import filedialog
+
+from collections import defaultdict
+from typing import List, Dict
+import spacy
+
+
+class PDFToPythonCodeGenerator:
+    def __init__(self):
+        try:
+            import os
+            if not spacy.util.is_package('en_core_web_sm'):
+                from spacy.cli import download
+                download('en_core_web_sm')
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError as e:
+            logging.error(f"加载spacy模型时出错：{e}")
+            self.nlp = spacy.load("en_core_web_sm")
+        logging.basicConfig(level=logging.INFO)
+
+    def load_pdf(self, pdf_path: str) -> str:
+        try:
+            text = ""
+            with pdfplumber.open(pdf_path) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            logging.info("PDF加载成功。")
+            return text
+        except Exception as e:
+            logging.error(f"无法加载PDF：{e}")
+            return ""
+
+    def preprocess_text(self, text: str) -> str:
+        try:
+            text = re.sub(r'https?://\S+', '', text)
+            text = re.sub(r'Electronic copy available at: .*', '', text)
+            text = re.sub(r'^\d+\s*$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'\n+', '\n', text)
+            text = re.sub(r'^\s*(Author|Title|Abstract)\s*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+            text = text.strip()
+            logging.info("文本预处理成功。")
+            return text
+        except Exception as e:
+            logging.error(f"无法预处理文本：{e}")
+            return ""
+
+    def detect_headings(self, text: str) -> List[str]:
+        try:
+            doc = self.nlp(text)
+            headings = []
+            for sent in doc.sents:
+                sent_text = sent.text.strip()
+                if len(sent_text.split()) < 10 and sent_text.istitle():
+                    headings.append(sent_text)
+            logging.info(f"检测到{len(headings)}个标题。")
+            return headings
+        except Exception as e:
+            logging.error(f"无法检测标题：{e}")
+            return []
+
+    def keyword_analysis(self, sections: Dict[str, str]) -> Dict[str, List[str]]:
+        keyword_map = defaultdict(list)
+
+        risk_management_keywords = [
+            "drawdown", "volatility", "reduce", "limit", "risk", "risk-adjusted",
+            "maximal drawdown", "market volatility", "bear markets", "stability",
+            "sidestep", "reduce drawdown", "stop-loss", "position sizing", "hedging"
+        ]
+        trading_signal_keywords = [
+            "buy", "sell", "signal", "indicator", "trend", "SMA", "moving average",
+            "momentum", "RSI", "MACD", "bollinger bands", "Rachev ratio", "stay long",
+            "exit", "market timing", "yield curve", "recession", "unemployment",
+            "housing starts", "Treasuries", "economic indicator"
+        ]
+
+        irrelevant_patterns = [
+            r'figure \d+',
+            r'\[\d+\]',
+            r'\(.*?\)',
+            r'chart',
+            r'\bfigure\b',
+            r'performance chart',
+            r'\d{4}-\d{4}',
+            r'^\s*$'
+        ]
+
+        processed_sentences = set()
+
+        for section, content in sections.items():
+            doc = self.nlp(content)
+            for sent in doc.sents:
+                sent_text = sent.text.lower().strip()
+                if not sent_text or len(sent_text.split()) <= 1:
+                    continue
+                if any(re.search(pattern, sent_text) for pattern in irrelevant_patterns):
+                    continue
+                if sent_text in processed_sentences:
+                    continue
+                processed_sentences.add(sent_text)
+
+                if any(kw in sent_text for kw in trading_signal_keywords):
+                    keyword_map['trading_signal'].append(sent.text.strip())
+                elif any(kw in sent_text for kw in risk_management_keywords):
+                    keyword_map['risk_management'].append(sent.text.strip())
+
+        for category, sentences in keyword_map.items():
+            unique_sentences = list(set(sentences))
+            keyword_map[category] = sorted(unique_sentences, key=len)
+
+        logging.info("关键词分析完成。")
+        return keyword_map
+
+    def generate_python_code_prompt(self, extracted_data: Dict[str, List[str]]) -> str:
+        trading_signals = '\n'.join(extracted_data.get('trading_signal', []))
+        risk_management = '\n'.join(extracted_data.get('risk_management', []))
+
+        prompt = f"""
+        你是一位Python开发专家。将以下交易策略和风险管理描述转换为完整、无错误的Python代码。
+
+        ### 交易策略：
+        {trading_signals}
+
+        ### 风险管理：
+        {risk_management}
+
+        ### 要求：
+        1. 编写一个独立的Python脚本，用于实现交易策略和风险管理。
+        2. 包含必要的类和函数定义。
+        3. 确保代码逻辑清晰且可运行。
+        4. 使用注释解释关键部分。
+        """
+        logging.info("生成的提示词已准备好，请将以下提示词复制到ChatGPT中生成代码。")
+        with open('generated_prompt.txt', 'w', encoding='utf-8') as f:
+            f.write(prompt)
+        print(prompt)
+        return prompt
+
+    def apply_syntax_highlighting(self, code: str, text_widget):
+        # This function is a placeholder for syntax highlighting functionality
+        pass
+
+
+if __name__ == "__main__":
+    pdf_to_code = PDFToPythonCodeGenerator()
+    root = tk.Tk()
+    root.withdraw()
+    pdf_path = filedialog.askopenfilename(title="请选择PDF文件", filetypes=[("PDF files", "*.pdf")])
+    if pdf_path:
+        pdf_text = pdf_to_code.load_pdf(pdf_path)
+        preprocessed_text = pdf_to_code.preprocess_text(pdf_text)
+        headings = pdf_to_code.detect_headings(preprocessed_text)
+        sections = {heading: preprocessed_text.split(heading)[1].strip() if heading in preprocessed_text else '' for heading in headings}  # Assume you have parsed sections properly
+        keyword_map = pdf_to_code.keyword_analysis(sections)
+        python_code = pdf_to_code.generate_python_code_prompt(keyword_map)
