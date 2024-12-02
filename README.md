@@ -13,12 +13,16 @@ With this tool, you can extract the core ideas from research papers and efficien
 - **GUI-Based PDF Selection**: A graphical user interface allows users to easily select the PDF file for conversion.
 
 ### Installation
-To use this tool, you need to have Python installed. Clone this repository:
+To use this tool, you need to have Python installed. You can either clone this repository or directly download/copy the script into a `.py` file.
+
+To clone the repository:
 
 ```bash
 $ git clone https://github.com/lussifa/pdf2code.git
 $ cd pdf2code
 ```
+
+Alternatively, you can download or copy the `pdf2code.py` file and save it locally.
 
 No additional dependencies are required for basic usage.
 
