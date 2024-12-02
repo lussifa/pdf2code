@@ -55,5 +55,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Special thanks to the quant community for feedback and inspiration.
 
 ### Contact
-If you have any questions or need further assistance, feel free to contact me at yourusername@example.com.
+If you have any questions or need further assistance, feel free to leave me a message.
 
